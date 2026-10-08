@@ -15,11 +15,12 @@ end
 local CTX_NAMES = GetUpvalue(GetUpvalue(Page.Build, "ContextFor"), "CTX_NAMES")
 local Contexts  = {
 	NavalWaterjet = "acf_naval_waterjet",
+	Buoyancy     = "acf_buoyancy",
 }
 
 local Position = table.KeyFromValue(CTX_NAMES, "Waterjet")
 
-for _, Name in ipairs({ "NavalWaterjet" }) do
+for _, Name in ipairs({ "NavalWaterjet", "Buoyancy" }) do
 	Position = table.KeyFromValue(CTX_NAMES, Name) or Position + 1
 
 	if CTX_NAMES[Position] ~= Name then
