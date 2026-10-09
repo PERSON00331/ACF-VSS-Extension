@@ -9,6 +9,7 @@ hook.Add("PreRegisterSENT", "ACF_VSS_Crew", function(ENT, Class)
 	local ENT_UpdateMedFreq      = ENT.UpdateMedFreq
 	local ENT_UpdateHighFreq     = ENT.UpdateHighFreq
 	local ENT_EnforceLimits      = ENT.EnforceLimits
+	local ENT_DamageCrew         = ENT.DamageCrew
 
 	local function ENT_UpdateLowFreq(self, cfg)
 		local SelfTbl = ENTITY.GetTable(self)
@@ -26,22 +27,22 @@ hook.Add("PreRegisterSENT", "ACF_VSS_Crew", function(ENT, Class)
 		-- Debug.Cross(MouthPos, 4, 1, Red, true)
 		local LiquidMask = bit.bor(CONTENTS_WATER, CONTENTS_SLIME)
 		local IsUnderwater = bit.band(util.PointContents(MouthPos), LiquidMask) ~= 0
-		local HasTankOxygen
+		local OxygenDemand = DeltaTime * ACF.CrewOxygenLossRate
 
 		if IsUnderwater then
 			for Tank in pairs(SelfTbl.TargetsByType.acf_o2tank or {}) do
 				if not IsValid(Tank) or not Tank.ConsumeOxygen then continue end
-				if not Tank:ConsumeOxygen(DeltaTime * ACF.CrewOxygenLossRate) then continue end
 
-				HasTankOxygen = true
-				break
+				OxygenDemand = OxygenDemand - Tank:ConsumeOxygen(OxygenDemand)
+
+				if OxygenDemand <= 0 then break end
 			end
 		end
 
-		if HasTankOxygen then
+		if IsUnderwater and OxygenDemand <= 0 then
 			SelfTbl.Oxygen = ACF.CrewOxygen
 		elseif IsUnderwater then
-			SelfTbl.Oxygen = SelfTbl.Oxygen - DeltaTime * ACF.CrewOxygenLossRate
+			SelfTbl.Oxygen = SelfTbl.Oxygen - OxygenDemand
 		else
 			SelfTbl.Oxygen = SelfTbl.Oxygen + DeltaTime * ACF.CrewOxygenGainRate
 		end
@@ -88,5 +89,87 @@ hook.Add("PreRegisterSENT", "ACF_VSS_Crew", function(ENT, Class)
 		WireLib.TriggerOutput(self, "ModelEff", self.ModelEff * 100)
 
 		if CrewType.OnSpawn then CrewType.OnSpawn(self) end
+	end
+
+	local DeltaTime = engine.TickInterval()
+	function ENT:EnforceGForces()
+		local Parent = ENTITY.GetParent(self)
+		if not IsEntityValid(Parent) then return end
+
+		local Contraption = ENTITY.CFW_GetContraption(self)
+		local Baseplate = Contraption and Contraption.ACF_Baseplate
+		if not IsEntityValid(Baseplate) then return end -- Why would this happen for a recent vehicle? no clue lol...
+		-- This is ACF_LiveData to try to help with performance issues (__index'ing)... ugh
+		local SampleRate = ENTITY.GetTable(Baseplate).ACF_LiveData["BaseplateType"].GForceTicks or 1
+		if Contraption.IsPickedUp then return end
+
+		local SelfTbl = ENTITY.GetTable(self)
+		local GForceIter = SelfTbl.GForceIter or 0
+		GForceIter = GForceIter + 1
+		SelfTbl.GForceIter = GForceIter
+		if GForceIter % SampleRate ~= 0 then return end
+
+		local NewPos = ENTITY.LocalToWorld(self, SelfTbl.CrewModel.ScanOffsetL)
+		-- Debug.Cross(NewPos, 4, 1, Red, true)
+		local GForce = ACF.UpdateGForceTracker(SelfTbl.GForceTracker, NewPos, SampleRate)
+
+		-- If specified, affect crew ergonomics based on G-forces
+		local GForceInfo = SelfTbl.CrewType.GForceInfo
+		local Effs = GForceInfo.Efficiencies
+
+		-- Commanders take Loader-accurate G-force penalties while performing Loader duty
+		if GForceInfo.LoaderEfficiencies then
+			local TargetsByType = SelfTbl.TargetsByType
+			local LinkedToGun = TargetsByType and TargetsByType.acf_gun and next(TargetsByType.acf_gun)
+			local LinkedToRack = TargetsByType and TargetsByType.acf_rack and next(TargetsByType.acf_rack)
+			if LinkedToGun or LinkedToRack then
+				Effs = GForceInfo.LoaderEfficiencies
+			end
+		end
+
+		if Effs then
+			SelfTbl.MoveEff = 1 - ACF.Normalize(GForce, Effs.Min, Effs.Max)
+			WireLib.TriggerOutput(self, "MoveEff", SelfTbl.MoveEff * 100)
+		end
+		WireLib.TriggerOutput(self, "GForce", GForce)
+
+		-- If specified, apply damage to crew based on G-forces
+		local Damages = GForceInfo.Damages
+		if Damages and SelfTbl.IsAlive then
+			local Bonus = SelfTbl.CrewTypeID == "Pilot" and (SelfTbl.OxygenTankGForceBonus or 0) or 0
+			local DamageMin = Damages.Min + Bonus
+			local DamageMax = Damages.Max + Bonus
+
+			if GForce > DamageMin then
+				local Damage = ACF.Normalize(GForce, DamageMin, DamageMax) * DeltaTime * SampleRate
+				SelfTbl.GForceStrain = SelfTbl.GForceStrain + Damage
+
+				if SelfTbl.GForceStrain > 1 then
+					local Excess = SelfTbl.GForceStrain - 1 -- "Unmanageable damage"
+					ENT_DamageCrew(self, Excess * SelfTbl.ACF.MaxHealth, "player/pl_fallpain3.wav")
+				end
+			end
+		end
+
+		SelfTbl.GForceStrain = math.Clamp(SelfTbl.GForceStrain - 0.001, 0, 1)
+		WireLib.TriggerOutput(self, "Stamina", SelfTbl.GForceStrain)
+	end
+
+	function ENT:UpdateOxygenTankGForceBonus()
+		if self.CrewTypeID ~= "Pilot" then
+			self.OxygenTankGForceBonus = 0
+
+			return
+		end
+
+		local Bonus = 0
+
+		for Tank in pairs(self.TargetsByType.acf_o2tank or {}) do
+			if not IsEntityValid(Tank) or not Tank.GetPilotGForceBonus then continue end
+
+			Bonus = math.max(Bonus, Tank:GetPilotGForceBonus())
+		end
+
+		self.OxygenTankGForceBonus = Bonus
 	end
 end)
