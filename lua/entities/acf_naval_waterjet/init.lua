@@ -36,7 +36,11 @@ local function GenerateLinkTable(Entity, Target)
 
 	local OutPosWorld = Entity:LocalToWorld(OutPos)
 	local Excessive, Angle = ACF.IsDriveshaftAngleExcessive(Target, Target.In, Entity, Plane)
-	if Excessive then return nil, Angle end
+	if Excessive then
+		Mobility.LinkFailure.Angle(Entity, Plane, Target, Target.In, Angle)
+
+		return nil, Angle
+	end
 
 	local Link = MobilityObj.Link(Entity, Target)
 
@@ -87,6 +91,7 @@ ACF.RegisterClassLink("acf_naval_waterjet", "acf_gearbox", function(This, Gearbo
 	Gearbox.Effectors[This] = Link
 	This.Gearboxes[Gearbox] = Link
 
+	Gearbox:UpdateLinkHints()
 	Gearbox:InvalidateClientInfo()
 
 	return true, "Waterjet linked successfully."
@@ -97,6 +102,8 @@ ACF.RegisterClassUnlink("acf_naval_waterjet", "acf_gearbox", function(This, Gear
 
 	Gearbox.Effectors[This] = nil
 	This.Gearboxes[Gearbox] = nil
+
+	Gearbox:UpdateLinkHints()
 
 	return true, "Waterjet unlinked successfully."
 end)
@@ -149,6 +156,7 @@ function ENT:Calc(InputRPM)
 	if not HasNavalBaseplate(self) then return 0 end
 	if not SelfTbl.InWater then return 0 end
 	if not IsValid(SelfTbl.Ancestor) then return 0 end
+	if ACF.IsDestroyed(self, SelfTbl) then return 0 end
 
 	local HealthRatio = SelfTbl.ACF.Health / SelfTbl.ACF.MaxHealth
 	local N = InputRPM / (2 * math.pi)
@@ -169,6 +177,7 @@ function ENT:Act(Torque, _, MassRatio, FlyRPM)
 	self:SetNW2Float("ACF_NavalWaterjetRPM", FlyRPM)
 	if not SelfTbl.InWater then return end
 	if not IsValid(SelfTbl.Ancestor) then return end
+	if ACF.IsDestroyed(self, SelfTbl) then return end
 
 	local HealthRatio = SelfTbl.ACF.Health / SelfTbl.ACF.MaxHealth
 	local N = FlyRPM / (2 * math.pi)
@@ -259,6 +268,14 @@ function ENT:Think()
 	self:NextThink(CurTime() + 0.1)
 
 	return true
+end
+
+function ENT:OnRemove(IsFullUpdate)
+	if IsFullUpdate then return end
+
+	for Gearbox in pairs(self.Gearboxes) do
+		self:Unlink(Gearbox)
+	end
 end
 
 function ENT:ACF_UpdateOverlayState(State)
