@@ -6,7 +6,9 @@
 This is an [ACF-3](https://github.com/ACF-Team/ACF-3) extension for Versailles Sandbox Server. Armored Combat Framework (ACF) is an addon for Garry's Mod that implements a damage system for props and players, while also providing entities and tools to build fairly realistic armored combat vehicles.
 
 **Notice to server owners**: I advise against adding this to your server. This is entirely just a learning thing for me, experimentation and just having fun on my end, I like doing stuff...
+
 **DO NOT INSTALL THIS UNLESS THIS IS WHAT YOU AND YOUR PLAYERS WANT!!!!**
+
 Some parts of this fork will also be forward to suggestions for ACF.
 
 ![ACF Logo](acf-logo-dark.png#gh-light-mode-only)
