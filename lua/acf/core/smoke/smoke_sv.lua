@@ -149,7 +149,7 @@ timer.Create("ACF WP Player Ignition", 0.1, 0, function() --burnthecivillians
 		local RadiusSqr = Radius * Radius
 
 		for _, Player in ipairs(player.GetAll()) do
-			if not Player:Alive() or Player:HasGodMode() or Player:IsOnFire() then continue end
+			if not Player:Alive() or Player:IsOnFire() then continue end
 
 			local Mins, Maxs = Player:WorldSpaceAABB()
 			local DX = math.max(Mins.x - Center.x, 0, Center.x - Maxs.x)
