@@ -82,13 +82,15 @@ function ENT:ACF_PostUpdateEntityData()
 end
 
 ACF.RegisterClassLink("acf_naval_waterjet", "acf_gearbox", function(This, Gearbox)
-	if Gearbox.Effectors[This] then return false, "This waterjet is already connected to this gearbox!" end
+	local Effectors = Gearbox:ACF_GetUserVar("Effectors")
+
+	if Effectors[This] then return false, "This waterjet is already connected to this gearbox!" end
 
 	local Link, DriveshaftAngle = GenerateLinkTable(Gearbox, This)
 
 	if not Link then return false, "Cannot link due to excessive driveshaft angle! (" .. math.Round(DriveshaftAngle) .. " deg)" end
 
-	Gearbox.Effectors[This] = Link
+	Effectors[This] = Link
 	This.Gearboxes[Gearbox] = Link
 
 	Gearbox:UpdateLinkHints()
@@ -98,9 +100,11 @@ ACF.RegisterClassLink("acf_naval_waterjet", "acf_gearbox", function(This, Gearbo
 end)
 
 ACF.RegisterClassUnlink("acf_naval_waterjet", "acf_gearbox", function(This, Gearbox)
-	if not Gearbox.Effectors[This] then return false, "This waterjet is not connected to this gearbox!" end
+	local Effectors = Gearbox:ACF_GetUserVar("Effectors")
 
-	Gearbox.Effectors[This] = nil
+	if not Effectors[This] then return false, "This waterjet is not connected to this gearbox!" end
+
+	Effectors[This] = nil
 	This.Gearboxes[Gearbox] = nil
 
 	Gearbox:UpdateLinkHints()
