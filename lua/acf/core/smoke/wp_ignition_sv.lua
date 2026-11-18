@@ -19,6 +19,20 @@ timer.Create("ACF WP Player Ignition", 0.1, 0, function()
 
 			if DX * DX + DY * DY + DZ * DZ > RadiusSqr then continue end
 
+			local Target = Vector(
+				math.Clamp(Center.x, Mins.x, Maxs.x),
+				math.Clamp(Center.y, Mins.y, Maxs.y),
+				math.Clamp(Center.z, Mins.z, Maxs.z)
+			)
+			local LOS = util.TraceLine({
+				start  = Center + Cloud.Normal * 4,
+				endpos = Target,
+				filter = Player,
+				mask   = MASK_SOLID,
+			})
+
+			if LOS.Hit then continue end
+
 			Player:Ignite(5)
 		end
 	end
